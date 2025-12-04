@@ -1,15 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { Product, Category } = require('../models');
+const { Product, Currency } = require('../models');
 
 // Get all products
 router.get('/', async (req, res) => {
   try {
     const products = await Product.findAll({
       include: [{
-        model: Category,
-        as: 'category',
-        attributes: ['id', 'name']
+        model: Currency,
+        as: 'currency',
+        attributes: ['id', 'code', 'name', 'symbol']
       }],
       order: [['createdAt', 'DESC']]
     });
@@ -24,9 +24,9 @@ router.get('/:id', async (req, res) => {
   try {
     const product = await Product.findByPk(req.params.id, {
       include: [{
-        model: Category,
-        as: 'category',
-        attributes: ['id', 'name']
+        model: Currency,
+        as: 'currency',
+        attributes: ['id', 'code', 'name', 'symbol']
       }]
     });
     if (!product) {
@@ -41,25 +41,18 @@ router.get('/:id', async (req, res) => {
 // Create product
 router.post('/', async (req, res) => {
   try {
-    // Map 'category' to 'categoryId' if provided
-    const productData = { ...req.body };
-    if (productData.category && !productData.categoryId) {
-      productData.categoryId = productData.category;
-      delete productData.category;
-    }
-    
-    const product = await Product.create(productData);
-    const productWithCategory = await Product.findByPk(product.id, {
+    const product = await Product.create(req.body);
+    const productWithCurrency = await Product.findByPk(product.id, {
       include: [{
-        model: Category,
-        as: 'category',
-        attributes: ['id', 'name']
+        model: Currency,
+        as: 'currency',
+        attributes: ['id', 'code', 'name', 'symbol']
       }]
     });
-    res.status(201).json(productWithCategory);
+    res.status(201).json(productWithCurrency);
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') {
-      res.status(400).json({ message: 'Product code or barcode already exists' });
+      res.status(400).json({ message: 'Barcode already exists' });
     } else {
       res.status(400).json({ message: error.message });
     }
@@ -74,25 +67,18 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Product not found' });
     }
     
-    // Map 'category' to 'categoryId' if provided
-    const updateData = { ...req.body };
-    if (updateData.category && !updateData.categoryId) {
-      updateData.categoryId = updateData.category;
-      delete updateData.category;
-    }
-    
-    await product.update(updateData);
+    await product.update(req.body);
     const updatedProduct = await Product.findByPk(product.id, {
       include: [{
-        model: Category,
-        as: 'category',
-        attributes: ['id', 'name']
+        model: Currency,
+        as: 'currency',
+        attributes: ['id', 'code', 'name', 'symbol']
       }]
     });
     res.json(updatedProduct);
   } catch (error) {
     if (error.name === 'SequelizeUniqueConstraintError') {
-      res.status(400).json({ message: 'Product code or barcode already exists' });
+      res.status(400).json({ message: 'Barcode already exists' });
     } else {
       res.status(400).json({ message: error.message });
     }
