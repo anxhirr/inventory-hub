@@ -11,6 +11,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve uploaded images
+const uploadsPath = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsPath));
+
 // Only serve static files if build directory exists (production)
 const buildPath = path.join(__dirname, '../client/build');
 if (fs.existsSync(buildPath)) {
@@ -21,8 +28,8 @@ if (fs.existsSync(buildPath)) {
 sequelize.authenticate()
   .then(() => {
     console.log('PostgreSQL connected successfully');
-    // Sync database (creates tables if they don't exist)
-    return sequelize.sync({ alter: false });
+    // Sync database (creates tables if they don't exist, alters if schema changed)
+    return sequelize.sync({ alter: true });
   })
   .then(() => {
     console.log('Database synced successfully');
@@ -35,6 +42,9 @@ sequelize.authenticate()
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/final-products', require('./routes/finalProducts'));
+app.use('/api/currencies', require('./routes/currencies'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/upload', require('./routes/upload'));
 
 // Serve React app (only if build exists)
 app.get('*', (req, res) => {
