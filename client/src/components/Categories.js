@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './Categories.css';
+import { useNotification } from '../context/NotificationContext';
+import ConfirmDialog from './ConfirmDialog';
 
 const Categories = () => {
+  const { showSuccess, showError } = useNotification();
   const [categories, setCategories] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -10,20 +13,25 @@ const Categories = () => {
     name: '',
     description: ''
   });
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    message: "",
+    onConfirm: null,
+  });
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       const res = await axios.get('/api/categories');
       setCategories(res.data);
     } catch (error) {
       console.error('Error fetching categories:', error);
-      alert('Error loading categories');
+      showError('Error loading categories');
     }
-  };
+  }, [showError]);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,8 +46,9 @@ const Categories = () => {
       setEditingCategory(null);
       setFormData({ name: '', description: '' });
       fetchCategories();
+      showSuccess(editingCategory ? 'Category updated successfully!' : 'Category created successfully!');
     } catch (error) {
-      alert(error.response?.data?.message || 'Error saving category');
+      showError(error.response?.data?.message || 'Error saving category');
     }
   };
 
@@ -58,8 +67,9 @@ const Categories = () => {
     try {
       await axios.delete(`/api/categories/${id}`);
       fetchCategories();
+      showSuccess('Category deleted successfully!');
     } catch (error) {
-      alert('Error deleting category');
+      showError('Error deleting category');
     }
   };
 
@@ -125,6 +135,14 @@ const Categories = () => {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        message={confirmDialog.message}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false, message: "", onConfirm: null })}
+      />
     </div>
   );
 };

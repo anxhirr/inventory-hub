@@ -1,56 +1,56 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './Products.css';
+import { useNotification } from '../context/NotificationContext';
+import { useCurrency } from '../context/CurrencyContext';
+import ConfirmDialog from './ConfirmDialog';
 
 const Products = () => {
+  const { showSuccess, showError } = useNotification();
+  const { formatPrice, currencies } = useCurrency();
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    product_code: '',
     barcode: '',
-    price: '',
-    category: '',
+    price_per_square_meter: '',
+    square_meters: '',
     description: '',
-    stock_quantity: '',
-    unit: 'piece',
-    supplier: ''
+    currency: ''
   });
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    message: "",
+    onConfirm: null,
+  });
+  const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    fetchProducts();
-    fetchCategories();
-  }, []);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       const res = await axios.get('/api/products');
       setProducts(res.data);
     } catch (error) {
       console.error('Error fetching products:', error);
-      alert('Error loading products');
+      showError('Error loading products');
     }
-  };
+  }, [showError]);
 
-  const fetchCategories = async () => {
-    try {
-      const res = await axios.get('/api/categories');
-      setCategories(res.data);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const data = {
         ...formData,
-        price: parseFloat(formData.price),
-        stock_quantity: parseInt(formData.stock_quantity) || 0
+        price_per_square_meter: parseFloat(formData.price_per_square_meter),
+        square_meters: parseFloat(formData.square_meters) || 0,
+        currencyId: formData.currency || null
       };
+      delete data.currency;
 
       if (editingProduct) {
         await axios.put(`/api/products/${editingProduct.id}`, data);
@@ -62,8 +62,9 @@ const Products = () => {
       setEditingProduct(null);
       resetForm();
       fetchProducts();
+      showSuccess(editingProduct ? 'Product updated successfully!' : 'Product created successfully!');
     } catch (error) {
-      alert(error.response?.data?.message || 'Error saving product');
+      showError(error.response?.data?.message || 'Error saving product');
     }
   };
 
@@ -71,40 +72,41 @@ const Products = () => {
     setEditingProduct(product);
     setFormData({
       name: product.name,
-      product_code: product.product_code,
       barcode: product.barcode || '',
-      price: product.price,
-      category: product.category?.id || product.categoryId || product.category,
+      price_per_square_meter: product.price_per_square_meter || '',
+      square_meters: product.square_meters || '',
       description: product.description || '',
-      stock_quantity: product.stock_quantity || '',
-      unit: product.unit || 'piece',
-      supplier: product.supplier || ''
+      currency: product.currency?.id || product.currencyId || ''
     });
     setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this product?')) return;
-    
-    try {
-      await axios.delete(`/api/products/${id}`);
-      fetchProducts();
-    } catch (error) {
-      alert('Error deleting product');
-    }
+  const handleDelete = (id) => {
+    setConfirmDialog({
+      isOpen: true,
+      message: "Are you sure you want to delete this product?",
+      onConfirm: async () => {
+        try {
+          await axios.delete(`/api/products/${id}`);
+          fetchProducts();
+          showSuccess("Product deleted successfully!");
+          setConfirmDialog({ isOpen: false, message: "", onConfirm: null });
+        } catch (error) {
+          showError("Error deleting product");
+          setConfirmDialog({ isOpen: false, message: "", onConfirm: null });
+        }
+      },
+    });
   };
 
   const resetForm = () => {
     setFormData({
       name: '',
-      product_code: '',
       barcode: '',
-      price: '',
-      category: '',
+      price_per_square_meter: '',
+      square_meters: '',
       description: '',
-      stock_quantity: '',
-      unit: 'piece',
-      supplier: ''
+      currency: ''
     });
   };
 
@@ -112,13 +114,29 @@ const Products = () => {
     <div className="products-container">
       <div className="page-header">
         <h2>Products</h2>
-        <button className="btn btn-primary" onClick={() => { setShowModal(true); setEditingProduct(null); resetForm(); }}>
-          + Add Product
-        </button>
+        <div className="header-actions">
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder="Search by name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+            />
+            <span className="search-icon">🔍</span>
+          </div>
+          <button className="btn btn-primary" onClick={() => { setShowModal(true); setEditingProduct(null); resetForm(); }}>
+            + Add Product
+          </button>
+        </div>
       </div>
 
       <div className="products-grid">
-        {products.map(product => (
+        {products
+          .filter((product) =>
+            product.name.toLowerCase().includes(searchTerm.toLowerCase())
+          )
+          .map(product => (
           <div key={product.id} className="product-card">
             <div className="product-header">
               <h3>{product.name}</h3>
@@ -128,13 +146,10 @@ const Products = () => {
               </div>
             </div>
             <div className="product-info">
-              <p><strong>Code:</strong> {product.product_code}</p>
-              {product.barcode && <p><strong>Barcode:</strong> {product.barcode}</p>}
-              <p><strong>Price:</strong> ${parseFloat(product.price || 0).toFixed(2)}</p>
-              <p><strong>Category:</strong> {product.category?.name || 'N/A'}</p>
-              <p><strong>Stock:</strong> {product.stock_quantity} {product.unit}</p>
-              {product.supplier && <p><strong>Supplier:</strong> {product.supplier}</p>}
-              {product.description && <p className="description">{product.description}</p>}
+              <p><strong>Barcode:</strong> {product.barcode}</p>
+              <p><strong>Price per m²:</strong> {formatPrice(product.price_per_square_meter || 0, product.currency?.symbol || '$')}</p>
+              <p><strong>Square Meters (m²):</strong> {parseFloat(product.square_meters || 0).toFixed(2)}</p>
+              {product.description && <p className="description"><strong>Description:</strong> {product.description}</p>}
             </div>
           </div>
         ))}
@@ -155,82 +170,53 @@ const Products = () => {
                 />
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Product Code *</label>
-                  <input
-                    type="text"
-                    value={formData.product_code}
-                    onChange={(e) => setFormData({ ...formData, product_code: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Barcode</label>
-                  <input
-                    type="text"
-                    value={formData.barcode}
-                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                  />
-                </div>
+              <div className="form-group">
+                <label>Barcode *</label>
+                <input
+                  type="text"
+                  value={formData.barcode}
+                  onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                  required
+                />
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Price *</label>
+                  <label>Price per m² *</label>
                   <input
                     type="number"
                     step="0.01"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                    value={formData.price_per_square_meter}
+                    onChange={(e) => setFormData({ ...formData, price_per_square_meter: e.target.value })}
                     required
                   />
                 </div>
 
                 <div className="form-group">
-                  <label>Category *</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    required
-                  >
-                    <option value="">Select Category</option>
-                    {categories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Stock Quantity</label>
+                  <label>Square Meters (m²) *</label>
                   <input
                     type="number"
-                    value={formData.stock_quantity}
-                    onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Unit</label>
-                  <input
-                    type="text"
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    placeholder="piece, kg, liter, etc."
+                    step="0.01"
+                    value={formData.square_meters}
+                    onChange={(e) => setFormData({ ...formData, square_meters: e.target.value })}
+                    required
                   />
                 </div>
               </div>
 
               <div className="form-group">
-                <label>Supplier</label>
-                <input
-                  type="text"
-                  value={formData.supplier}
-                  onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                />
+                <label>Currency</label>
+                <select
+                  value={formData.currency}
+                  onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                >
+                  <option value="">Select Currency</option>
+                  {currencies.map(currency => (
+                    <option key={currency.id} value={currency.id}>
+                      {currency.symbol} - {currency.name} ({currency.code})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group">
@@ -254,6 +240,14 @@ const Products = () => {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        message={confirmDialog.message}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ isOpen: false, message: "", onConfirm: null })}
+      />
     </div>
   );
 };
